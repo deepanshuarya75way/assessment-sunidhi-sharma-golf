@@ -1,18 +1,42 @@
-require("dotenv").config(); // Added () - Critical to load your keys!
+require("dotenv").config();
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
-exports.createCheckoutSession = async (req, res) => {
-  const { userId, email, planType, charityId, percent } = req.body;
+const VALID_PLANS = ["monthly", "yearly"];
 
-  if (!userId) {
-    return res.status(400).json({ error: "User ID is missing from request" });
+exports.createCheckoutSession = async (req, res) => {
+  const { userId, email, planType, charityId, percent } = req.body || {};
+
+  // Required subscriber information
+  if (!userId || !email) {
+    return res.status(400).json({
+      error: "Your account details are missing. Please log in and try again.",
+    });
+  }
+
+  if (!VALID_PLANS.includes(planType)) {
+    return res.status(400).json({ error: "Please select a valid plan." });
+  }
+
+  if (!charityId) {
+    return res.status(400).json({ error: "Please select a charity." });
+  }
+
+  const pct = Number(percent);
+  if (!Number.isInteger(pct) || pct < 10 || pct > 100) {
+    return res
+      .status(400)
+      .json({ error: "Contribution must be between 10% and 100%." });
   }
 
   const priceId =
     planType === "yearly"
       ? process.env.STRIPE_YEARLY_PRICE_ID
       : process.env.STRIPE_MONTHLY_PRICE_ID;
+
+  if (!priceId) {
+    return res.status(500).json({ error: "Plan pricing is not configured." });
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -22,18 +46,18 @@ exports.createCheckoutSession = async (req, res) => {
       customer_email: email,
       success_url: `${process.env.CLIENT_URL}/dashboard?success=true`,
       cancel_url: `${process.env.CLIENT_URL}/pricing?canceled=true`,
-
+      // Stripe metadata values must be strings
       metadata: {
-        userId: userId,
-        charityId: charityId || "default_charity",
-        charityPercent: percent || "10",
+        userId: String(userId),
+        charityId: String(charityId),
+        charityPercent: String(pct),
         plan: planType,
       },
     });
 
-    res.status(200).json({ url: session.url });
+    return res.status(200).json({ url: session.url });
   } catch (error) {
     console.error("Stripe Session Error:", error.message);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 };

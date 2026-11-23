@@ -1,49 +1,106 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link, useLocation } from "react-router-dom";
 import Pricing from "./Pricing";
+import { supabase } from "../supabaseClient";
+import { startCheckout } from "../checkout";
 
 const API = process.env.REACT_APP_API_URL;
 
-const Signup = () => {
+const Signup = ({ plan }) => {
+  const location = useLocation();
+  const initialPlan = plan || location.state?.plan || "monthly";
+
   const [charities, setCharities] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(1);
+  const [error, setError] = useState("");
+  const [step, setStep] = useState(plan || location.state?.plan ? 2 : 1);
   const [formData, setFormData] = useState({
     email: "",
-    plan: "monthly",
+    plan: initialPlan,
     charityId: "",
     percent: 10,
+    password: "",
   });
+  const [hasSession, setHasSession] = useState(false);
+  const [charitiesError, setCharitiesError] = useState("");
+
+  // Prefill the account email from the logged-in session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email) {
+        setHasSession(true);
+        setFormData((f) => ({ ...f, email: session.user.email }));
+      }
+    });
+  }, []);
 
   useEffect(() => {
     fetch(`${API}/api/charities`)
-      .then((res) => res.json())
-      .then((data) => setCharities(data || []))
-      .catch((err) => console.error("Error fetching charities:", err));
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data)) {
+          throw new Error(data?.error || "Invalid response");
+        }
+        setCharities(data);
+        if (data.length === 0) setCharitiesError("No charities available yet.");
+      })
+      .catch((err) => {
+        console.error("Error fetching charities:", err);
+        setCharitiesError(
+          "Could not load charities. Check that the backend is running and REACT_APP_API_URL is correct.",
+        );
+      });
   }, []);
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (!formData.charityId) return alert("Please select a charity first.");
+    setError("");
+
+    if (!formData.charityId) {
+      return setError("Please select a charity first.");
+    }
 
     setLoading(true);
     try {
-      const response = await fetch(`${API}/api/payments/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
+      // New visitors: create the account (or sign in) before checkout
+      if (!hasSession) {
+        const email = formData.email.trim();
+        if (!email) throw new Error("Please enter your email.");
+        if (formData.password.length < 6) {
+          throw new Error("Password must be at least 6 characters.");
+        }
 
-      const { url, error } = await response.json();
-      if (url) {
-        window.location.href = url;
-      } else {
-        alert(`Payment error: ${error || "Please try again."}`);
+        const { data: up, error: upErr } = await supabase.auth.signUp({
+          email,
+          password: formData.password,
+        });
+        if (upErr && !/already registered/i.test(upErr.message)) throw upErr;
+
+        if (!up?.session) {
+          const { error: inErr } = await supabase.auth.signInWithPassword({
+            email,
+            password: formData.password,
+          });
+          if (inErr) {
+            throw new Error(
+              /confirm/i.test(inErr.message)
+                ? "Please confirm your email, then log in and try again."
+                : "Could not sign you in. Check your email and password.",
+            );
+          }
+        }
       }
+
+      // Redirects to Stripe only on success; throws with a clear message otherwise
+      await startCheckout({
+        planType: formData.plan,
+        charityId: formData.charityId,
+        percent: formData.percent,
+      });
     } catch (err) {
       console.error("Signup failed", err);
-      alert("Something went wrong connecting to the server.");
-    } finally {
+      setError(err.message || "Checkout could not be started.");
       setLoading(false);
     }
   };
@@ -92,6 +149,16 @@ const Signup = () => {
             className="max-w-lg w-full p-10 bg-slate-900/50 backdrop-blur-2xl rounded-[3rem] border border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-10"
           >
             <form onSubmit={handleSignup} className="space-y-8">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-400 text-sm font-medium">
+                  {error}{" "}
+                  {/log in|account/i.test(error) && (
+                    <Link to="/login" className="underline font-bold">
+                      Log in
+                    </Link>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 ml-2 uppercase tracking-[0.2em]">
                   Account Email
@@ -100,12 +167,33 @@ const Signup = () => {
                   required
                   type="email"
                   placeholder="Enter your email"
+                  value={formData.email}
+                  readOnly={hasSession}
                   className="w-full p-4 bg-slate-950/50 border border-slate-700 rounded-2xl outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 text-white transition-all placeholder:text-slate-600"
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
                 />
               </div>
+
+              {!hasSession && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 ml-2 uppercase tracking-[0.2em]">
+                    Password
+                  </label>
+                  <input
+                    required
+                    type="password"
+                    minLength={6}
+                    placeholder="Create a password (min 6 characters)"
+                    value={formData.password}
+                    className="w-full p-4 bg-slate-950/50 border border-slate-700 rounded-2xl outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 text-white transition-all placeholder:text-slate-600"
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
+                  />
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 ml-2 uppercase tracking-[0.2em]">
@@ -114,6 +202,7 @@ const Signup = () => {
                 <div className="relative">
                   <select
                     required
+                    value={formData.charityId}
                     className="w-full p-4 bg-slate-950/50 border border-slate-700 rounded-2xl outline-none focus:border-cyan-500 text-white transition-all appearance-none cursor-pointer"
                     onChange={(e) =>
                       setFormData({ ...formData, charityId: e.target.value })
@@ -136,6 +225,9 @@ const Signup = () => {
                     ▼
                   </div>
                 </div>
+                {charitiesError && (
+                  <p className="text-xs text-red-400 ml-2">{charitiesError}</p>
+                )}
               </div>
 
               <div className="p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">

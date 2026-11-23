@@ -9,7 +9,7 @@ const supabase = createClient(
 exports.getAllCharities = async (req, res) => {
   const { data, error } = await supabase
     .from("charities")
-    .select("id, name, description, is_featured, created_at")
+    .select("id, name, description, is_featured")
     .order("name", { ascending: true });
 
   if (error) {

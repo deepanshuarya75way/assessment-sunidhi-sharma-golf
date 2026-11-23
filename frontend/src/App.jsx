@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import AdminPanel from "./pages/AdminPanel";
 import Pricing from "./components/Pricing";
+import Signup from "./components/Signup";
 
 const AdminRoute = ({ user, loading, children }) => {
   const ADMIN_EMAIL = process.env.REACT_APP_ADMIN_EMAIL;
@@ -53,6 +54,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/signup" element={<Signup/> } />
 
           <Route
             path="/dashboard"

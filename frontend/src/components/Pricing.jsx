@@ -1,6 +1,5 @@
 import React from "react";
-import { supabase } from "../supabaseClient";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const FEATURES = [
   "Monthly prize draw entry",
@@ -10,45 +9,12 @@ const FEATURES = [
   "Winner verification system",
 ];
 
-const Pricing = () => {
-  const handleSubscribe = async (planType) => {
-    try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+const Pricing = ({ onPlanChange }) => {
+  const navigate = useNavigate();
 
-      if (sessionError || !session) {
-        return (window.location.href = "/login");
-      }
-
-      const API = process.env.REACT_APP_API_URL;
-
-      const response = await fetch(`${API}/api/payments/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // FIXED: Pass JWT so backend can verify the caller
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          planType,
-          userId: session.user.id,
-          email: session.user.email,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert(`Payment error: ${data.error || "Please try again."}`);
-      }
-    } catch (err) {
-      console.error("Payment error:", err);
-      alert("Could not connect to the payment server. Please try again.");
-    }
+  const handleSubscribe = (planType) => {
+    if (onPlanChange) return onPlanChange(planType);
+    navigate("/signup", { state: { plan: planType } });
   };
 
   return (
