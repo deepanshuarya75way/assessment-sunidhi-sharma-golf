@@ -7,7 +7,6 @@ const VALID_PLANS = ["monthly", "yearly"];
 exports.createCheckoutSession = async (req, res) => {
   const { userId, email, planType, charityId, percent } = req.body || {};
 
-  // Required subscriber information
   if (!userId || !email) {
     return res.status(400).json({
       error: "Your account details are missing. Please log in and try again.",
@@ -46,7 +45,6 @@ exports.createCheckoutSession = async (req, res) => {
       customer_email: email,
       success_url: `${process.env.CLIENT_URL}/dashboard?success=true`,
       cancel_url: `${process.env.CLIENT_URL}/pricing?canceled=true`,
-      // Stripe metadata values must be strings
       metadata: {
         userId: String(userId),
         charityId: String(charityId),

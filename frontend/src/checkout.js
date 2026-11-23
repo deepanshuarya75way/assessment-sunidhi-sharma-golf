@@ -10,7 +10,7 @@ export async function startCheckout({ planType, charityId, percent }) {
     data: { session },
     error: sessionError,
   } = await supabase.auth.getSession();
-
+console.log(session)
   if (sessionError || !session?.user?.id || !session.user.email) {
     throw new Error("Please log in or create an account before subscribing.");
   }

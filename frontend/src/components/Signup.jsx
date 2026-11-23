@@ -25,7 +25,6 @@ const Signup = ({ plan }) => {
   const [hasSession, setHasSession] = useState(false);
   const [charitiesError, setCharitiesError] = useState("");
 
-  // Prefill the account email from the logged-in session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) {
@@ -63,7 +62,6 @@ const Signup = ({ plan }) => {
 
     setLoading(true);
     try {
-      // New visitors: create the account (or sign in) before checkout
       if (!hasSession) {
         const email = formData.email.trim();
         if (!email) throw new Error("Please enter your email.");
@@ -92,7 +90,6 @@ const Signup = ({ plan }) => {
         }
       }
 
-      // Redirects to Stripe only on success; throws with a clear message otherwise
       await startCheckout({
         planType: formData.plan,
         charityId: formData.charityId,
